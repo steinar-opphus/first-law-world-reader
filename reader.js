@@ -15,10 +15,16 @@ const ReaderRules = {
   workComplete(data, cutoff) { return data.completed_at === this.lastPosition(data) && cutoff === data.completed_at && cutoff > 0; },
   link(token, page, cutoff) {
     const label = token.label || (page && this.name(page, cutoff)) || '';
-    return {label, href: page && page.from <= cutoff && this.name(page, cutoff) ? page.file : null};
+    return {label, href: page && page.from <= cutoff && this.name(page, cutoff) ?
+      (page.redirect && page.redirect.from <= cutoff ? page.redirect.file : page.file) : null};
+  },
+  resolve(data, page, cutoff) {
+    if (!page?.redirect || page.redirect.from > cutoff) return page;
+    const target = data.pages.find(p => p.id === page.redirect.id);
+    return target && target.from <= cutoff ? target : page;
   },
   name(page, cutoff) { return page.names.filter(n => n.from <= cutoff).at(-1)?.text || ''; },
-  pages(data, cutoff) { return data.pages.filter(p => p.from <= cutoff && this.name(p, cutoff)); },
+  pages(data, cutoff) { return data.pages.filter(p => p.from <= cutoff && this.name(p, cutoff) && !(p.redirect && p.redirect.from <= cutoff)); },
   categoryPages(data, category, cutoff) {
     const pages = this.pages(data,cutoff).filter(p => p.category === category);
     // Book cards use reading order; all other directories sort the currently known names.
@@ -534,7 +540,7 @@ if (typeof document !== 'undefined') (() => {
     document.querySelectorAll('[data-gallery-link]').forEach(link => { link.href = ReaderRules.navigationHref(data,{file:'gallery.html'},cutoff); });
     const pageId = document.body.dataset.page;
     if (pageId === 'gallery' || pageId.startsWith('image-')) galleryPage(pageId);
-    else if (pageId === 'index') landing(pages); else article(lookup.get(pageId));
+    else if (pageId === 'index') landing(pages); else article(ReaderRules.resolve(data,lookup.get(pageId),cutoff));
   }
   window.addEventListener('storage',event => {
     if (event.key === data.storageKey || event.key === null) {
